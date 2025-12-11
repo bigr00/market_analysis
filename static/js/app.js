@@ -18,6 +18,10 @@ class BTCAnalyzer {
         this.soundEnabled = true;
         this.lastPrice = 0;
 
+        // Track if user has interacted with the chart (zoomed/scrolled)
+        this.userHasInteracted = false;
+        this.isInitialLoad = true;
+
         this.init();
     }
 
@@ -145,6 +149,14 @@ class BTCAnalyzer {
             width: container.clientWidth,
             height: container.clientHeight,
         });
+
+        // Track user interaction with the chart
+        this.mainChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+            // Only set userHasInteracted after initial load is complete
+            if (!this.isInitialLoad) {
+                this.userHasInteracted = true;
+            }
+        });
     }
 
     setupIndicatorChart() {
@@ -219,7 +231,7 @@ class BTCAnalyzer {
         await this.loadChartData(this.currentTimeframe);
     }
 
-    async loadChartData(timeframe) {
+    async loadChartData(timeframe, preserveView = false) {
         try {
             const response = await fetch(`/api/chart/${timeframe}`);
             const data = await response.json();
@@ -229,13 +241,19 @@ class BTCAnalyzer {
                 return;
             }
 
-            this.updateChartData(data);
+            this.updateChartData(data, preserveView);
         } catch (error) {
             console.error('Failed to load chart data:', error);
         }
     }
 
-    updateChartData(data) {
+    updateChartData(data, preserveView = false) {
+        // Save current visible range if we need to preserve the view
+        let savedRange = null;
+        if (preserveView && this.userHasInteracted) {
+            savedRange = this.mainChart.timeScale().getVisibleLogicalRange();
+        }
+
         // Update candlesticks
         if (data.candles && data.candles.length > 0) {
             this.candlestickSeries.setData(data.candles);
@@ -271,8 +289,19 @@ class BTCAnalyzer {
             this.updatePatternMarkers(data.patterns);
         }
 
-        // Fit content
-        this.mainChart.timeScale().fitContent();
+        // Restore view or fit content
+        if (savedRange && preserveView && this.userHasInteracted) {
+            // Restore the user's zoom/scroll position
+            this.mainChart.timeScale().setVisibleLogicalRange(savedRange);
+        } else if (this.isInitialLoad) {
+            // Only fit content on initial load
+            this.mainChart.timeScale().fitContent();
+            // Mark initial load as complete after a short delay
+            setTimeout(() => {
+                this.isInitialLoad = false;
+            }, 500);
+        }
+        // If user has interacted but we're not explicitly preserving, don't change the view
     }
 
     updatePatternMarkers(patterns) {
@@ -312,8 +341,8 @@ class BTCAnalyzer {
             this.updateHistoryDisplay(data.signal_history);
         }
 
-        // Reload chart data
-        this.loadChartData(this.currentTimeframe);
+        // Reload chart data - preserve the user's view if they've zoomed/scrolled
+        this.loadChartData(this.currentTimeframe, true);
 
         // Handle notification
         if (data.should_notify && data.suggestion) {
@@ -560,7 +589,10 @@ class BTCAnalyzer {
                 document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.currentTimeframe = btn.dataset.tf;
-                this.loadChartData(this.currentTimeframe);
+                // Reset interaction flag when changing timeframes so chart fits content
+                this.userHasInteracted = false;
+                this.isInitialLoad = true;
+                this.loadChartData(this.currentTimeframe, false);
             });
         });
 
