@@ -13,10 +13,12 @@ class BTCAnalyzer {
         this.lineSeries = {};
         this.markers = [];
 
-        this.currentTimeframe = '15m';
-        this.currentIndicator = 'macd';
-        this.soundEnabled = true;
-        this.lastPrice = 0;
+        // Load persisted state from sessionStorage (survives reconnects, cleared on tab close)
+        this.currentTimeframe = this.loadFromSession('currentTimeframe', '15m');
+        this.currentIndicator = this.loadFromSession('currentIndicator', 'macd');
+        this.soundEnabled = this.loadFromSession('soundEnabled', true);
+        this.lastPrice = 0;  // Current price for display
+        this.initialPrice = this.loadFromSession('initialPrice', null);  // Price when session started
 
         // Track if user has interacted with the chart (zoomed/scrolled)
         this.userHasInteracted = false;
@@ -26,11 +28,44 @@ class BTCAnalyzer {
         this.init();
     }
 
+    // ==================== Session Storage ====================
+
+    /**
+     * Save a value to sessionStorage (persists across reconnects, cleared when tab closes)
+     */
+    saveToSession(key, value) {
+        try {
+            sessionStorage.setItem(`btc_analyzer_${key}`, JSON.stringify(value));
+        } catch (e) {
+            console.warn('Failed to save to sessionStorage:', e);
+        }
+    }
+
+    /**
+     * Load a value from sessionStorage
+     */
+    loadFromSession(key, defaultValue) {
+        try {
+            const stored = sessionStorage.getItem(`btc_analyzer_${key}`);
+            if (stored !== null) {
+                return JSON.parse(stored);
+            }
+        } catch (e) {
+            console.warn('Failed to load from sessionStorage:', e);
+        }
+        return defaultValue;
+    }
+
     init() {
         this.setupSocket();
         this.setupCharts();
         this.setupEventListeners();
         this.loadInitialData();
+
+        // Apply saved indicator selection after charts are ready
+        if (this.currentIndicator !== 'macd') {
+            this.switchIndicator(this.currentIndicator);
+        }
     }
 
     // ==================== Socket Connection ====================
@@ -361,12 +396,19 @@ class BTCAnalyzer {
         const priceEl = document.getElementById('current-price');
         const changeEl = document.getElementById('price-change');
 
+        // Store initial price when session starts (first price received)
+        if (this.initialPrice === null) {
+            this.initialPrice = price;
+            this.saveToSession('initialPrice', price);
+        }
+
         if (priceEl) {
             priceEl.textContent = `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
-        if (changeEl && this.lastPrice > 0) {
-            const change = ((price - this.lastPrice) / this.lastPrice) * 100;
+        // Calculate percentage change from initial session price (not last price)
+        if (changeEl && this.initialPrice > 0) {
+            const change = ((price - this.initialPrice) / this.initialPrice) * 100;
             changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
             changeEl.className = 'price-change ' + (change >= 0 ? 'positive' : 'negative');
         }
@@ -595,6 +637,7 @@ class BTCAnalyzer {
                 document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.currentTimeframe = btn.dataset.tf;
+                this.saveToSession('currentTimeframe', this.currentTimeframe);
                 // Reset all flags when changing timeframes so chart fits content
                 this.userHasInteracted = false;
                 this.isInitialLoad = true;
@@ -602,6 +645,13 @@ class BTCAnalyzer {
                 this.loadChartData(this.currentTimeframe, false);
             });
         });
+
+        // Set active timeframe button from session on load
+        const activeTimeframeBtn = document.querySelector(`.tf-btn[data-tf="${this.currentTimeframe}"]`);
+        if (activeTimeframeBtn) {
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+            activeTimeframeBtn.classList.add('active');
+        }
 
         // Indicator tabs
         document.querySelectorAll('.ind-tab').forEach(tab => {
@@ -612,11 +662,23 @@ class BTCAnalyzer {
             });
         });
 
+        // Set active indicator tab from session on load
+        const activeIndicatorTab = document.querySelector(`.ind-tab[data-indicator="${this.currentIndicator}"]`);
+        if (activeIndicatorTab) {
+            document.querySelectorAll('.ind-tab').forEach(t => t.classList.remove('active'));
+            activeIndicatorTab.classList.add('active');
+        }
+
         // Sound toggle
         const soundToggle = document.getElementById('sound-toggle');
         if (soundToggle) {
+            // Set initial state from session
+            soundToggle.querySelector('.sound-on').classList.toggle('hidden', !this.soundEnabled);
+            soundToggle.querySelector('.sound-off').classList.toggle('hidden', this.soundEnabled);
+
             soundToggle.addEventListener('click', () => {
                 this.soundEnabled = !this.soundEnabled;
+                this.saveToSession('soundEnabled', this.soundEnabled);
                 soundToggle.querySelector('.sound-on').classList.toggle('hidden', !this.soundEnabled);
                 soundToggle.querySelector('.sound-off').classList.toggle('hidden', this.soundEnabled);
             });
@@ -640,6 +702,7 @@ class BTCAnalyzer {
 
     switchIndicator(indicator) {
         this.currentIndicator = indicator;
+        this.saveToSession('currentIndicator', indicator);
 
         // Hide all
         Object.values(this.indicatorSeries).forEach(series => {
