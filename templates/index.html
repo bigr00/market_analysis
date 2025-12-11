@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Market Analysis</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1>BTC Market Analysis</h1>
+                <span class="symbol-badge">BTCUSDT</span>
+            </div>
+            <div class="header-center">
+                <div class="price-display">
+                    <span class="price-label">BTC Price</span>
+                    <span class="price-value" id="current-price">$0.00</span>
+                    <span class="price-change" id="price-change"></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator" id="connection-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
+                <button class="sound-toggle" id="sound-toggle" title="Toggle Sound">
+                    <svg class="sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                    <svg class="sound-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                        <line x1="23" y1="9" x2="17" y2="15"></line>
+                        <line x1="17" y1="9" x2="23" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left Panel - Charts -->
+            <div class="charts-panel">
+                <!-- Timeframe Selector -->
+                <div class="timeframe-selector">
+                    <button class="tf-btn" data-tf="5m">5m</button>
+                    <button class="tf-btn active" data-tf="15m">15m</button>
+                    <button class="tf-btn" data-tf="1h">1H</button>
+                    <button class="tf-btn" data-tf="4h">4H</button>
+                    <button class="tf-btn" data-tf="1d">1D</button>
+                </div>
+
+                <!-- Main Chart -->
+                <div class="chart-container">
+                    <div id="main-chart"></div>
+                </div>
+
+                <!-- Indicator Charts -->
+                <div class="indicator-charts">
+                    <div class="indicator-tabs">
+                        <button class="ind-tab active" data-indicator="macd">MACD</button>
+                        <button class="ind-tab" data-indicator="rsi">RSI</button>
+                        <button class="ind-tab" data-indicator="volume">Volume</button>
+                    </div>
+                    <div id="indicator-chart"></div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Analysis -->
+            <div class="analysis-panel">
+                <!-- Signal Score -->
+                <div class="signal-card">
+                    <h3>Signal Score</h3>
+                    <div class="score-display">
+                        <div class="score-gauge">
+                            <div class="gauge-fill" id="score-gauge"></div>
+                            <div class="gauge-pointer" id="gauge-pointer"></div>
+                        </div>
+                        <div class="score-value" id="signal-score">0.00</div>
+                        <div class="score-label" id="signal-label">NEUTRAL</div>
+                    </div>
+                    <div class="signal-components">
+                        <div class="component">
+                            <span class="comp-label">Candlestick</span>
+                            <div class="comp-bar">
+                                <div class="comp-fill" id="candlestick-bar"></div>
+                            </div>
+                            <span class="comp-value" id="candlestick-score">0.00</span>
+                        </div>
+                        <div class="component">
+                            <span class="comp-label">Chart Pattern</span>
+                            <div class="comp-bar">
+                                <div class="comp-fill" id="chart-bar"></div>
+                            </div>
+                            <span class="comp-value" id="chart-score">0.00</span>
+                        </div>
+                        <div class="component">
+                            <span class="comp-label">Indicators</span>
+                            <div class="comp-bar">
+                                <div class="comp-fill" id="indicator-bar"></div>
+                            </div>
+                            <span class="comp-value" id="indicator-score">0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trade Suggestion -->
+                <div class="trade-card" id="trade-card">
+                    <h3>Trade Suggestion</h3>
+                    <div class="trade-direction" id="trade-direction">
+                        <span class="direction-icon">—</span>
+                        <span class="direction-text">No Signal</span>
+                    </div>
+                    <div class="trade-levels">
+                        <div class="level entry">
+                            <span class="level-label">Entry</span>
+                            <span class="level-value" id="entry-price">—</span>
+                        </div>
+                        <div class="level stop">
+                            <span class="level-label">Stop Loss</span>
+                            <span class="level-value" id="stop-loss">—</span>
+                        </div>
+                        <div class="level tp1">
+                            <span class="level-label">Take Profit 1</span>
+                            <span class="level-value" id="tp1">—</span>
+                        </div>
+                        <div class="level tp2">
+                            <span class="level-label">Take Profit 2</span>
+                            <span class="level-value" id="tp2">—</span>
+                        </div>
+                    </div>
+                    <div class="trade-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">R:R Ratio</span>
+                            <span class="meta-value" id="rr-ratio">—</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Confidence</span>
+                            <span class="meta-value" id="confidence">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detected Patterns -->
+                <div class="patterns-card">
+                    <h3>Detected Patterns</h3>
+                    <div class="patterns-list" id="patterns-list">
+                        <div class="no-patterns">No patterns detected</div>
+                    </div>
+                </div>
+
+                <!-- Timeframe Alignment -->
+                <div class="alignment-card">
+                    <h3>Timeframe Alignment</h3>
+                    <div class="alignment-display">
+                        <div class="alignment-bar">
+                            <div class="alignment-fill" id="alignment-fill"></div>
+                        </div>
+                        <span class="alignment-value" id="alignment-value">0%</span>
+                    </div>
+                    <div class="tf-signals" id="tf-signals">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Signal History -->
+                <div class="history-card">
+                    <h3>Recent Signals</h3>
+                    <div class="history-list" id="history-list">
+                        <div class="no-history">No signals yet</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Signal Alert Modal -->
+        <div class="alert-modal hidden" id="alert-modal">
+            <div class="alert-content">
+                <div class="alert-icon" id="alert-icon">📈</div>
+                <div class="alert-title" id="alert-title">BULLISH SIGNAL</div>
+                <div class="alert-price" id="alert-price">$0.00</div>
+                <div class="alert-score" id="alert-score">Score: +0.00</div>
+                <button class="alert-close" id="alert-close">Dismiss</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Elements -->
+    <audio id="bullish-sound" preload="auto">
+        <source src="/static/sounds/bullish.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="bearish-sound" preload="auto">
+        <source src="/static/sounds/bearish.mp3" type="audio/mpeg">
+    </audio>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
