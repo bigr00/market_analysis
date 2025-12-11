@@ -38,6 +38,8 @@ class WebAnalyzer:
         self.analysis_thread: Optional[threading.Thread] = None
         self.last_analysis = {}
         self.signal_history = []
+        # Track the currently selected timeframe (defaults to first configured)
+        self.current_timeframe = config.timeframes[0] if config.timeframes else TimeFrame.H1
 
     def start(self):
         """Start the analysis loop in a background thread"""
@@ -55,6 +57,16 @@ class WebAnalyzer:
         if self.analysis_thread:
             self.analysis_thread.join(timeout=5)
         self.fetcher.close()
+
+    def set_timeframe(self, timeframe_str: str):
+        """Set the current timeframe to fetch data for"""
+        tf_map = {
+            '1m': TimeFrame.M1, '5m': TimeFrame.M5, '15m': TimeFrame.M15,
+            '30m': TimeFrame.M30, '1h': TimeFrame.H1, '4h': TimeFrame.H4, '1d': TimeFrame.D1
+        }
+        if timeframe_str in tf_map:
+            self.current_timeframe = tf_map[timeframe_str]
+            print(f"[INFO] Timeframe set to {timeframe_str}")
 
     def _analysis_loop(self):
         """Background analysis loop"""
@@ -75,24 +87,23 @@ class WebAnalyzer:
 
     def _fetch_and_analyze(self):
         """Fetch data and perform analysis"""
-        # Fetch data for all timeframes
-        data = self.fetcher.get_multi_timeframe_data()
-        for tf, df in data.items():
-            self.buffer.update(tf, df)
+        # Only fetch data for the currently selected timeframe to reduce API usage
+        df = self.fetcher.get_klines(self.current_timeframe)
+        self.buffer.update(self.current_timeframe, df)
+        print(f"[INFO] Fetched {len(df)} candles for {self.current_timeframe.value}")
 
-        # Perform analysis
-        buffer_data = {tf: self.buffer.get(tf) for tf in self.config.timeframes
-                      if self.buffer.get(tf) is not None}
-
-        if not buffer_data:
+        # Perform analysis on the current timeframe only
+        current_df = self.buffer.get(self.current_timeframe)
+        if current_df is None:
             return
 
-        # Multi-timeframe analysis
+        buffer_data = {self.current_timeframe: current_df}
+
+        # Single-timeframe analysis (passed as dict for compatibility)
         mtf_signal = self.aggregator.analyze_multi_timeframe(buffer_data)
 
-        # Get primary timeframe for trade suggestion
-        primary_tf = self.config.timeframes[0]
-        primary_df = buffer_data.get(primary_tf)
+        # Use current timeframe for trade suggestion
+        primary_df = current_df
 
         suggestion = None
         if primary_df is not None:
@@ -416,6 +427,13 @@ def handle_request_update():
     """Handle manual update request"""
     if analyzer:
         emit('analysis_update', analyzer.get_analysis_data())
+
+
+@socketio.on('set_timeframe')
+def handle_set_timeframe(data):
+    """Handle timeframe change from client"""
+    if analyzer and data and 'timeframe' in data:
+        analyzer.set_timeframe(data['timeframe'])
 
 
 def create_app(config: TradingConfig) -> Flask:

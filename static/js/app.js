@@ -76,6 +76,8 @@ class BTCAnalyzer {
         this.socket.on('connect', () => {
             console.log('Connected to server');
             this.updateConnectionStatus('connected');
+            // Notify backend of current timeframe on connect
+            this.socket.emit('set_timeframe', { timeframe: this.currentTimeframe });
         });
 
         this.socket.on('disconnect', () => {
@@ -638,6 +640,8 @@ class BTCAnalyzer {
                 btn.classList.add('active');
                 this.currentTimeframe = btn.dataset.tf;
                 this.saveToSession('currentTimeframe', this.currentTimeframe);
+                // Notify backend of timeframe change so it only fetches this timeframe
+                this.socket.emit('set_timeframe', { timeframe: this.currentTimeframe });
                 // Reset all flags when changing timeframes so chart fits content
                 this.userHasInteracted = false;
                 this.isInitialLoad = true;
