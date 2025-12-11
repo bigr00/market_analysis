@@ -67,11 +67,10 @@ A comprehensive real-time cryptocurrency market analysis tool that detects tradi
 ## Screenshots
 
 ### Web Dashboard
-```
+
 ![Screen 1](/screens/screen1.png?raw=true)
 
 ![Screen 2](/screens/screen2.png?raw=true)
-```
 
 ---
 
