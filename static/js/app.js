@@ -21,6 +21,7 @@ class BTCAnalyzer {
         // Track if user has interacted with the chart (zoomed/scrolled)
         this.userHasInteracted = false;
         this.isInitialLoad = true;
+        this.hasLoadedData = false;  // Track if we've loaded data at least once
 
         this.init();
     }
@@ -249,8 +250,9 @@ class BTCAnalyzer {
 
     updateChartData(data, preserveView = false) {
         // Save current visible range if we need to preserve the view
+        // Preserve if: explicitly requested AND (user has interacted OR we've loaded data before)
         let savedRange = null;
-        if (preserveView && this.userHasInteracted) {
+        if (preserveView && (this.userHasInteracted || this.hasLoadedData)) {
             savedRange = this.mainChart.timeScale().getVisibleLogicalRange();
         }
 
@@ -290,18 +292,21 @@ class BTCAnalyzer {
         }
 
         // Restore view or fit content
-        if (savedRange && preserveView && this.userHasInteracted) {
-            // Restore the user's zoom/scroll position
+        if (savedRange && preserveView) {
+            // Restore the previous view position
             this.mainChart.timeScale().setVisibleLogicalRange(savedRange);
-        } else if (this.isInitialLoad) {
-            // Only fit content on initial load
+        } else if (!this.hasLoadedData) {
+            // Only fit content on first ever load
             this.mainChart.timeScale().fitContent();
             // Mark initial load as complete after a short delay
             setTimeout(() => {
                 this.isInitialLoad = false;
             }, 500);
         }
-        // If user has interacted but we're not explicitly preserving, don't change the view
+        // If we've loaded data before but not preserving, keep current view
+
+        // Mark that we've loaded data at least once
+        this.hasLoadedData = true;
     }
 
     updatePatternMarkers(patterns) {
@@ -341,8 +346,9 @@ class BTCAnalyzer {
             this.updateHistoryDisplay(data.signal_history);
         }
 
-        // Reload chart data - preserve the user's view if they've zoomed/scrolled
-        this.loadChartData(this.currentTimeframe, true);
+        // Reload chart data - preserve view if we've already loaded data once
+        // This handles both regular updates AND reconnection scenarios
+        this.loadChartData(this.currentTimeframe, this.hasLoadedData);
 
         // Handle notification
         if (data.should_notify && data.suggestion) {
@@ -589,9 +595,10 @@ class BTCAnalyzer {
                 document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.currentTimeframe = btn.dataset.tf;
-                // Reset interaction flag when changing timeframes so chart fits content
+                // Reset all flags when changing timeframes so chart fits content
                 this.userHasInteracted = false;
                 this.isInitialLoad = true;
+                this.hasLoadedData = false;
                 this.loadChartData(this.currentTimeframe, false);
             });
         });
